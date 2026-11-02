@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>중학교 과학 4지선다 제스처 퀴즈</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            science: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0284c7',
+              600: '#0369a1',
+              700: '#075985',
+              900: '#0c4a6e',
+            }
+          },
+          animation: {
+            'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React 18 & ReactDOM & Babel for in-browser JSX/TS transpilation -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap');
+    
+    * {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    body {
+      background-color: #0b1120;
+      color: #f1f5f9;
+      user-select: none;
+      overflow-x: hidden;
+    }
+
+    /* Mirror webcam for natural interaction */
+    .mirror-video {
+      transform: scaleX(-1);
+    }
+
+    /* Circular Hold Animation */
+    .hold-ring-circle {
+      transition: stroke-dashoffset 0.05s linear;
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <div id="root"></div>
+
+  <!-- Main React App with TypeScript/Babel -->
+  <script type="text/babel" data-type="module">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // --- Web Audio Synthesizer for rich SFX (zero external audio file dependency) ---
+    class SoundEffects {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            this.ctx = new AudioContext();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      playTick() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+        gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.05);
+      }
+      playCorrect() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+        notes.forEach((freq, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime + i * 0.08);
+          gain.gain.setValueAtTime(0.12, this.ctx.currentTime + i * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + i * 0.08 + 0.25);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + i * 0.08);
+          osc.stop(this.ctx.currentTime + i * 0.08 + 0.25);
+        });
+      }
+      playWrong() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const notes = [311.13, 277.18]; // Eb4, Db4 low chime
+        notes.forEach((freq, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime + i * 0.12);
+          gain.gain.setValueAtTime(0.1, this.ctx.currentTime + i * 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + i * 0.12 + 0.2);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + i * 0.12);
+          osc.stop(this.ctx.currentTime + i * 0.12 + 0.2);
+        });
+      }
+      playComplete() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const notes = [440, 554.37, 659.25, 880, 1108.73];
+        notes.forEach((freq, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime + i * 0.1);
+          gain.gain.setValueAtTime(0.15, this.ctx.currentTime + i * 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + i * 0.1 + 0.4);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + i * 0.1);
+          osc.stop(this.ctx.currentTime + i * 0.1 + 0.4);
+        });
+      }
+    }
+
+    const sfx = new SoundEffects();
+
+    // --- 10 High-Quality Middle School Science Questions ---
+    const SCIENCE_QUESTIONS = [
+      {
+        id: 1,
+        subject: "물리",
+        grade: "중1 과학",
+        title: "빛의 굴절 현상",
+        question: "공기 중에서 물속으로 빛이 비스듬히 입사할 때 발생하는 현상으로, 굴절각이 입사각보다 작아지는 핵심 원인은 무엇일까요?",
+        options: [
+          "물속에서 빛의 속력이 공기보다 느려지기 때문",
+          "물속에서 빛의 진동수가 급격히 감소하기 때문",
+          "물 표면에서 빛이 모두 흡수되기 때문",
+          "물속에서 빛의 파장이 공기보다 길어지기 때문"
+        ],
+        answer: 1,
+        explanation: "빛이 한 매질에서 다른 매질로 들어갈 때 매질에 따른 '빛의 속력 차이' 때문에 경로가 꺾이게 됩니다. 물속에서 빛의 속력은 공기 중보다 느리므로 법선(경계면의 수직선) 쪽으로 꺾여 굴절각이 입사각보다 작아집니다."
+      },
+      {
+        id: 2,
+        subject: "화학",
+        grade: "중1 과학",
+        title: "물질의 상태 변화",
+        question: "겨울철 영하의 날씨에 얼어있던 눈사람이 물로 녹지 않고도 크기가 점점 작아지는 현상과 관련된 상태 변화의 명칭은?",
+        options: [
+          "융해 (고체 → 액체)",
+          "기화 (액체 → 기체)",
+          "승화 (고체 → 기체)",
+          "응고 (액체 → 고체)"
+        ],
+        answer: 3,
+        explanation: "영하의 기온에서는 고체(눈·얼음)가 액체(물)를 거치지 않고 직접 기체(수증기)로 변하는 '승화(고체→기체)' 현상이 일어납니다. 겨울철 빨래가 얼면서 마르는 것이나 드라이아이스가 작아지는 것도 같은 원리입니다."
+      },
+      {
+        id: 3,
+        subject: "생물",
+        grade: "중2 과학",
+        title: "식물의 구조와 작용",
+        question: "식물의 잎 뒷면에 있는 기공을 통해 식물체 내부의 물이 수증기 형태로 공기 중에 배출되는 현상은?",
+        options: [
+          "광합성 작용",
+          "증산 작용",
+          "세포 호흡",
+          "소화 작용"
+        ],
+        answer: 2,
+        explanation: "기공을 통해 물이 수증기로 날아가는 현상을 '증산 작용'이라고 합니다. 증산 작용은 뿌리에서 흡수한 물과 무기 양분이 높은 나무 꼭대기까지 끌어올려지는 주된 원동력이 되며 식물의 체온을 조절합니다."
+      },
+      {
+        id: 4,
+        subject: "지구과학",
+        grade: "중1 과학",
+        title: "지진파와 지구 내부",
+        question: "지진이 일어났을 때 관측소에 가장 빠르게 도달하며, 물질의 상태(고체, 액체, 기체)를 모두 통과할 수 있는 지진파는?",
+        options: [
+          "P파 (종파)",
+          "S파 (횡파)",
+          "L파 (표면파)",
+          "러브파 (Love wave)"
+        ],
+        answer: 1,
+        explanation: "P파(Primary wave)는 진행 방향과 진동 방향이 나란한 종파로 전파 속도가 가장 빨라 지진계에 가장 먼저 기록됩니다. 또한 고체, 액체, 기체를 모두 통과할 수 있습니다. 반면 S파는 횡파이며 고체만 통과합니다."
+      },
+      {
+        id: 5,
+        subject: "물리",
+        grade: "중3 과학",
+        title: "뉴턴 운동 법칙",
+        question: "달리던 버스가 급정거할 때, 서 있던 승객들의 몸이 버스가 달리던 앞쪽 방향으로 쏠리는 현상을 설명하는 물리 법칙은?",
+        options: [
+          "관성의 법칙 (뉴턴 제1법칙)",
+          "가속도의 법칙 (뉴턴 제2법칙)",
+          "작용 반작용 법칙 (뉴턴 제3법칙)",
+          "만유인력의 법칙"
+        ],
+        answer: 1,
+        explanation: "물체가 외부 힘을 받지 않거나 알짜힘이 0일 때 기존의 운동 상태를 계속 유지하려는 성질을 '관성'이라고 합니다. 버스는 멈췄지만 승객의 몸은 원래 달리던 속도로 계속 나아가려 하므로 앞쪽으로 쏠립니다."
+      },
+      {
+        id: 6,
+        subject: "화학",
+        grade: "중1 과학",
+        title: "기체의 성질",
+        question: "온도가 일정할 때, 기체에 가해지는 압력이 2배, 3배로 증가하면 기체의 부피는 1/2, 1/3로 반비례하여 줄어든다는 법칙은?",
+        options: [
+          "샤를 법칙",
+          "보일 법칙",
+          "아보가드로 법칙",
+          "돌턴의 분압 법칙"
+        ],
+        answer: 2,
+        explanation: "일정한 온도에서 일정량 기체의 부피는 압력에 반비례한다는 법칙은 '보일 법칙(Boyle's Law)'입니다 (압력 × 부피 = 일정). 샤를 법칙은 압력이 일정할 때 온도와 부피가 비례하는 법칙입니다."
+      },
+      {
+        id: 7,
+        subject: "생물",
+        grade: "중2 과학",
+        title: "순환계와 심장",
+        question: "사람의 심장에서 온몸으로 혈액을 강한 압력으로 내뿜기 위해 심장 벽의 근육이 가장 두껍고 탄력적인 부위는?",
+        options: [
+          "우심방",
+          "우심실",
+          "좌심방",
+          "좌심실"
+        ],
+        answer: 4,
+        explanation: "좌심실은 대동맥을 통해 머리끝부터 발끝까지 온몸 순환(체순환)을 시켜야 하므로 매우 강한 수축력이 필요합니다. 따라서 심장의 네 개 방실 중에서 근육벽이 가장 두껍게 발달해 있습니다."
+      },
+      {
+        id: 8,
+        subject: "지구과학",
+        grade: "중2 과학",
+        title: "달의 위상 변화",
+        question: "태양 - 달 - 지구 순서로 일직선상에 위치하여, 지구에서는 달의 어두운 면만 바라보게 되어 밤하늘에 달이 보이지 않는 위상은?",
+        options: [
+          "삭 (New Moon)",
+          "상현달 (First Quarter)",
+          "망 / 보름달 (Full Moon)",
+          "하현달 (Third Quarter)"
+        ],
+        answer: 1,
+        explanation: "달이 태양과 지구 사이에 위치할 때를 '삭'이라고 합니다. 이때 달의 햇빛을 받는 반구가 태양을 향하고 지구 쪽은 밤인 면을 보게 되므로 지구에서는 달이 보이지 않습니다."
+      },
+      {
+        id: 9,
+        subject: "물리",
+        grade: "중3 과학",
+        title: "전기와 자기",
+        question: "코일 주위에서 자석을 빠르게 움직일 때 전자기 유도 현상에 의해 코일에 흐르게 되는 전류의 명칭은?",
+        options: [
+          "직류 전류",
+          "유도 전류",
+          "방전 전류",
+          "초전도 전류"
+        ],
+        answer: 2,
+        explanation: "자기장의 변화에 의해 회로에 전압(기전력)이 생겨 흐르는 전류를 '유도 전류'라고 합니다. 이 원리는 발전기, 교통카드 결제, 인덕션 레인지, 스마트폰 무선 충전기 등 현대 과학기술에 널리 사용됩니다."
+      },
+      {
+        id: 10,
+        subject: "화학",
+        grade: "중3 과학",
+        title: "화학 반응의 규칙",
+        question: "화학 반응이 일어날 때, 반응 전 물질들의 총 질량과 반응 후 생성된 물질들의 총 질량의 합은 항상 같다는 법칙은?",
+        options: [
+          "일정 성분비 법칙",
+          "기체 반응 법칙",
+          "질량 보존 법칙",
+          "에너지 보존 법칙"
+        ],
+        answer: 3,
+        explanation: "프랑스의 과학자 라부아지에가 확립한 '질량 보존 법칙'입니다. 화학 반응이 일어날 때 원자의 종류와 개수는 변하지 않고 단지 원자들의 결합 배열만 달라지므로 반응 전후 총 질량은 항상 일정합니다."
+      }
+    ];
+
+    // Helper: calculate distance between 2 points
+    function dist(p1, p2) {
+      const dx = p1.x - p2.x;
+      const dy = p1.y - p2.y;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // Hand Finger Detection Algorithm
+    // Count extended fingers (1 to 4)
+    function analyzeFingers(landmarks) {
+      if (!landmarks || landmarks.length < 21) return 0;
+
+      const wrist = landmarks[0];
+
+      // Finger tips: Index(8), Middle(12), Ring(16), Pinky(20)
+      // Finger PIPs: Index(6), Middle(10), Ring(14), Pinky(18)
+      // Finger MCPs: Index(5), Middle(9), Ring(13), Pinky(17)
+
+      // Measure extension: Tip distance to wrist vs PIP distance to wrist
+      const isIndexExt = dist(landmarks[8], wrist) > dist(landmarks[6], wrist) * 1.25;
+      const isMiddleExt = dist(landmarks[12], wrist) > dist(landmarks[10], wrist) * 1.25;
+      const isRingExt = dist(landmarks[16], wrist) > dist(landmarks[14], wrist) * 1.25;
+      const isPinkyExt = dist(landmarks[20], wrist) > dist(landmarks[18], wrist) * 1.25;
+
+      // Thumb tip (4) to pinky base (17) vs thumb IP (3) to pinky base
+      const isThumbExt = dist(landmarks[4], landmarks[17]) > dist(landmarks[3], landmarks[17]) * 1.2;
+
+      const fingers = [isIndexExt, isMiddleExt, isRingExt, isPinkyExt];
+      const countExt = fingers.filter(Boolean).length;
+
+      // Map to choices 1 ~ 4:
+      // Pattern 1: Only Index extended (countExt === 1 && isIndexExt)
+      if (countExt === 1 && isIndexExt) return 1;
+      // Pattern 2: Index + Middle extended (V sign, countExt === 2)
+      if (countExt === 2 && isIndexExt && isMiddleExt) return 2;
+      // Pattern 3: Index + Middle + Ring (countExt === 3)
+      if (countExt === 3 && isIndexExt && isMiddleExt && isRingExt) return 3;
+      // Pattern 4: All 4 main fingers extended (Index, Middle, Ring, Pinky)
+      if (countExt === 4) return 4;
+
+      // If thumb is used or count falls neatly in 1..4
+      if (countExt >= 1 && countExt <= 4) {
+        return countExt;
+      }
+
+      // Thumb + index as 2
+      if (isThumbExt && isIndexExt && !isMiddleExt && !isRingExt && !isPinkyExt) {
+        return 2;
+      }
+
+      return 0; // 0, 5, or ambiguous
+    }
+
+    // --- Main Application Component ---
+    function App() {
+      const [currentQIndex, setCurrentQIndex] = useState(0);
+      const [score, setScore] = useState(0);
+      const [userAnswers, setUserAnswers] = useState({});
+      const [selectedOption, setSelectedOption] = useState(null); // When answered
+      const [isAnswered, setIsAnswered] = useState(false);
+      const [quizCompleted, setQuizCompleted] = useState(false);
+
+      // Camera & Gesture States
+      const [cameraActive, setCameraActive] = useState(true);
+      const [cameraError, setCameraError] = useState(null);
+      const [detectedFinger, setDetectedFinger] = useState(0);
+      const [holdingFinger, setHoldingFinger] = useState(null);
+      const [holdProgress, setHoldProgress] = useState(0); // 0 to 100%
+      const [soundOn, setSoundOn] = useState(true);
+
+      const videoRef = useRef(null);
+      const canvasRef = useRef(null);
+      const landmarkerRef = useRef(null);
+      const animFrameRef = useRef(null);
+      const holdStartRef = useRef(null);
+      const currentHoldingRef = useRef(null);
+      const lastTickTimeRef = useRef(0);
+
+      const currentQuestion = SCIENCE_QUESTIONS[currentQIndex];
+
+      // Handle sound toggle
+      const toggleSound = () => {
+        const next = !soundOn;
+        setSoundOn(next);
+        sfx.enabled = next;
+      };
+
+      // Select an option (by gesture 1.5s hold or direct mouse/touch click)
+      const handleSelectOption = useCallback((optionNumber) => {
+        if (isAnswered || quizCompleted) return;
+
+        const isCorrect = optionNumber === currentQuestion.answer;
+        setSelectedOption(optionNumber);
+        setIsAnswered(true);
+
+        setUserAnswers(prev => ({
+          ...prev,
+          [currentQIndex]: {
+            selected: optionNumber,
+            correct: currentQuestion.answer,
+            isCorrect: isCorrect
+          }
+        }));
+
+        if (isCorrect) {
+          setScore(prev => prev + 10);
+          sfx.playCorrect();
+          // Mini celebratory confetti
+          if (window.confetti) {
+            window.confetti({
+              particleCount: 40,
+              spread: 60,
+              origin: { y: 0.6 }
+            });
+          }
+        } else {
+          sfx.playWrong();
+        }
+
+        // Reset holding state
+        setHoldingFinger(null);
+        setHoldProgress(0);
+        holdStartRef.current = null;
+        currentHoldingRef.current = null;
+      }, [isAnswered, quizCompleted, currentQIndex, currentQuestion]);
+
+      // Move to Next Question or Finish
+      const handleNextQuestion = () => {
+        if (currentQIndex < SCIENCE_QUESTIONS.length - 1) {
+          setCurrentQIndex(prev => prev + 1);
+          setSelectedOption(null);
+          setIsAnswered(false);
+          setHoldingFinger(null);
+          setHoldProgress(0);
+          holdStartRef.current = null;
+          currentHoldingRef.current = null;
+        } else {
+          setQuizCompleted(true);
+          sfx.playComplete();
+          if (window.confetti) {
+            window.confetti({
+              particleCount: 150,
+              spread: 100,
+              origin: { y: 0.4 }
+            });
+          }
+        }
+      };
+
+      // Restart Quiz
+      const handleRestartQuiz = () => {
+        setCurrentQIndex(0);
+        setScore(0);
+        setUserAnswers({});
+        setSelectedOption(null);
+        setIsAnswered(false);
+        setQuizCompleted(false);
+        setHoldingFinger(null);
+        setHoldProgress(0);
+        holdStartRef.current = null;
+        currentHoldingRef.current = null;
+      };
+
+      // Initialize MediaPipe Tasks-Vision HandLandmarker
+      useEffect(() => {
+        let isMounted = true;
+
+        async function initMediaPipe() {
+          try {
+            // Dynamically import @mediapipe/tasks-vision from CDN
+            const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm");
+            const wasmFileset = await vision.FilesetResolver.forVisionTasks(
+              "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+            );
+
+            if (!isMounted) return;
+
+            const handLandmarker = await vision.HandLandmarker.createFromOptions(wasmFileset, {
+              baseOptions: {
+                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+                delegate: "GPU"
+              },
+              runningMode: "VIDEO",
+              numHands: 1
+            });
+
+            if (!isMounted) return;
+            landmarkerRef.current = handLandmarker;
+            startWebcam();
+          } catch (err) {
+            console.warn("MediaPipe CDN load warning:", err);
+            if (isMounted) {
+              setCameraError("카메라 또는 MediaPipe 모델을 로드하는 중 오류가 발생했습니다. 하단의 마우스/터치 클릭으로 문제를 풀 수 있습니다.");
+            }
+          }
+        }
+
+        initMediaPipe();
+
+        return () => {
+          isMounted = false;
+          if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+          stopWebcam();
+        };
+      }, []);
+
+      // Start webcam stream
+      const startWebcam = async () => {
+        try {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error("브라우저에서 카메라를 지원하지 않습니다.");
+          }
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              facingMode: "user"
+            },
+            audio: false
+          });
+
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+              videoRef.current.play();
+              predictWebcam();
+            };
+          }
+          setCameraError(null);
+        } catch (err) {
+          console.warn("Camera access denied or unavailable:", err);
+          setCameraError("카메라 권한이 거부되었거나 사용할 수 없습니다. 보기를 직접 클릭하여 문제를 풀 수 있습니다!");
+        }
+      };
+
+      const stopWebcam = () => {
+        if (videoRef.current && videoRef.current.srcObject) {
+          const tracks = videoRef.current.srcObject.getTracks();
+          tracks.forEach(track => track.stop());
+          videoRef.current.srcObject = null;
+        }
+      };
+
+      // Frame Prediction Loop with Drawing & Hold Duration Tracking
+      const predictWebcam = () => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const landmarker = landmarkerRef.current;
+
+        if (!video || !canvas || !landmarker) return;
+
+        if (video.readyState >= 2) {
+          canvas.width = video.videoWidth || 320;
+          canvas.height = video.videoHeight || 240;
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          const startTimeMs = performance.now();
+          const results = landmarker.detectForVideo(video, startTimeMs);
+
+          if (results.landmarks && results.landmarks.length > 0) {
+            const landmarks = results.landmarks[0];
+
+            // Draw hand skeleton on canvas
+            drawHandSkeleton(ctx, landmarks, canvas.width, canvas.height);
+
+            // Analyze extended fingers count (1..4)
+            const fingerCount = analyzeFingers(landmarks);
+            setDetectedFinger(fingerCount);
+
+            // Handle 1.5s Hold Logic
+            if (!isAnswered && !quizCompleted && fingerCount >= 1 && fingerCount <= 4) {
+              const now = performance.now();
+
+              if (currentHoldingRef.current !== fingerCount) {
+                // Started holding new finger
+                currentHoldingRef.current = fingerCount;
+                holdStartRef.current = now;
+                setHoldingFinger(fingerCount);
+                setHoldProgress(0);
+              } else {
+                // Continuing to hold the same finger
+                const elapsed = now - holdStartRef.current;
+                const progress = Math.min(100, (elapsed / 1500) * 100);
+                setHoldProgress(progress);
+
+                // Sound feedback every 350ms
+                if (now - lastTickTimeRef.current > 350) {
+                  sfx.playTick();
+                  lastTickTimeRef.current = now;
+                }
+
+                // If held for 1.5 seconds (1500ms) -> Confirm Answer!
+                if (elapsed >= 1500) {
+                  handleSelectOption(fingerCount);
+                }
+              }
+            } else {
+              // Not holding a valid choice
+              if (currentHoldingRef.current !== null) {
+                currentHoldingRef.current = null;
+                holdStartRef.current = null;
+                setHoldingFinger(null);
+                setHoldProgress(0);
+              }
+            }
+          } else {
+            // No hand detected
+            setDetectedFinger(0);
+            if (currentHoldingRef.current !== null) {
+              currentHoldingRef.current = null;
+              holdStartRef.current = null;
+              setHoldingFinger(null);
+              setHoldProgress(0);
+            }
+          }
+        }
+
+        animFrameRef.current = requestAnimationFrame(predictWebcam);
+      };
+
+      // Draw aesthetic futuristic hand skeleton
+      const drawHandSkeleton = (ctx, landmarks, w, h) => {
+        const connections = [
+          [0,1],[1,2],[2,3],[3,4], // Thumb
+          [0,5],[5,6],[6,7],[7,8], // Index
+          [5,9],[9,10],[10,11],[11,12], // Middle
+          [9,13],[13,14],[14,15],[15,16], // Ring
+          [13,17],[17,18],[18,19],[19,20], // Pinky
+          [0,17] // Palm base
+        ];
+
+        // Draw connections
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.75)"; // Sky blue
+        ctx.lineWidth = 3;
+        connections.forEach(([i, j]) => {
+          const p1 = landmarks[i];
+          const p2 = landmarks[j];
+          ctx.beginPath();
+          ctx.moveTo(p1.x * w, p1.y * h);
+          ctx.lineTo(p2.x * w, p2.y * h);
+          ctx.stroke();
+        });
+
+        // Draw landmark nodes
+        landmarks.forEach((pt, idx) => {
+          const isTip = [4, 8, 12, 16, 20].includes(idx);
+          ctx.fillStyle = isTip ? "#38bdf8" : "#f43f5e";
+          ctx.beginPath();
+          ctx.arc(pt.x * w, pt.y * h, isTip ? 6 : 4, 0, 2 * Math.PI);
+          ctx.fill();
+          if (isTip) {
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+        });
+      };
+
+      // Toggle Camera On/Off
+      const handleToggleCamera = () => {
+        if (cameraActive) {
+          stopWebcam();
+          setCameraActive(false);
+          setHoldingFinger(null);
+          setHoldProgress(0);
+        } else {
+          setCameraActive(true);
+          startWebcam();
+        }
+      };
+
+      return (
+        <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100">
+          {/* Top Header Bar */}
+          <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+                <span className="text-lg">🔬</span>
+              </div>
+              <div>
+                <h1 className="text-base font-bold tracking-tight text-white flex items-center gap-1.5">
+                  중학 과학 제스처 퀴즈
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-950 text-sky-400 border border-sky-800/60">
+                    MediaPipe
+                  </span>
+                </h1>
+                <p className="text-xs text-slate-400 hidden sm:block">손가락 1~4개로 선택 • 1.5초 유지 시 확정</p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {/* Score Badge */}
+              <div className="flex items-center space-x-1.5 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
+                <span className="text-xs text-amber-400">★</span>
+                <span className="text-xs font-bold text-amber-300">{score}점</span>
+              </div>
+
+              {/* Sound Toggle */}
+              <button
+                onClick={toggleSound}
+                title={soundOn ? "소리 끄기" : "소리 켜기"}
+                className={`p-2 rounded-lg border transition ${
+                  soundOn ? "bg-slate-800 text-sky-400 border-slate-700" : "bg-slate-900 text-slate-500 border-slate-800"
+                }`}
+              >
+                {soundOn ? "🔊" : "🔇"}
+              </button>
+
+              {/* Camera Toggle Button */}
+              <button
+                onClick={handleToggleCamera}
+                title={cameraActive ? "카메라 끄기 (클릭 모드)" : "카메라 켜기 (제스처 모드)"}
+                className={`flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                  cameraActive 
+                    ? "bg-sky-500/10 text-sky-400 border-sky-500/40 hover:bg-sky-500/20" 
+                    : "bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700"
+                }`}
+              >
+                <span>{cameraActive ? "📹 ON" : "📷 OFF"}</span>
+              </button>
+            </div>
+          </header>
+
+          {/* Privacy & Zero-Server-Upload Banner */}
+          <div className="bg-slate-900/60 border-b border-slate-800/80 px-4 py-1.5 text-center text-xs text-slate-400 flex items-center justify-center space-x-2">
+            <span className="text-emerald-400">🛡️</span>
+            <span><strong>100% 브라우저 로컬 처리:</strong> 카메라 영상은 절대 외부 서버로 전송되지 않으며 기기 내에서만 실시간 분석됩니다.</span>
+          </div>
+
+          {/* Main Content Area */}
+          <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 flex flex-col justify-between">
+            {!quizCompleted ? (
+              <div className="space-y-6">
+                {/* Progress Bar & Subject Tag */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 font-semibold border border-indigo-800">
+                        {currentQuestion.subject}
+                      </span>
+                      <span className="text-slate-500">{currentQuestion.grade}</span>
+                      <span className="text-slate-500">•</span>
+                      <span className="text-slate-400">{currentQuestion.title}</span>
+                    </div>
+                    <span className="font-bold text-sky-400">
+                      문제 {currentQIndex + 1} / {SCIENCE_QUESTIONS.length}
+                    </span>
+                  </div>
+
+                  {/* Visual Progress Bar */}
+                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-gradient-to-r from-sky-500 to-indigo-500 h-full transition-all duration-300 rounded-full"
+                      style={{ width: `${((currentQIndex + 1) / SCIENCE_QUESTIONS.length) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Webcam & Hand Landmarker Overlay Card */}
+                {cameraActive && (
+                  <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 shadow-xl relative overflow-hidden">
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                      {/* Video + Canvas Box */}
+                      <div className="relative w-44 h-32 sm:w-48 sm:h-36 bg-slate-950 rounded-xl overflow-hidden border border-slate-700/80 shrink-0 flex items-center justify-center">
+                        <video 
+                          ref={videoRef} 
+                          playsInline 
+                          muted 
+                          className="absolute inset-0 w-full h-full object-cover mirror-video"
+                        />
+                        <canvas 
+                          ref={canvasRef} 
+                          className="absolute inset-0 w-full h-full object-cover mirror-video pointer-events-none"
+                        />
+                        
+                        {cameraError && (
+                          <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-2 text-center text-xs text-rose-400">
+                            <span className="text-lg mb-1">⚠️</span>
+                            <span>카메라 연결 불가</span>
+                            <span className="text-[10px] text-slate-500 mt-0.5">클릭 모드로 진행</span>
+                          </div>
+                        )}
+
+                        {/* Real-time Detected Badge on Video */}
+                        <div className="absolute bottom-1.5 left-1.5 bg-black/70 backdrop-blur px-2 py-0.5 rounded text-[11px] font-medium text-slate-200 border border-white/10">
+                          {detectedFinger > 0 ? (
+                            <span className="text-sky-400 font-bold">손가락 {detectedFinger}개 감지</span>
+                          ) : (
+                            <span className="text-slate-400">손 인식 대기 중...</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Gesture Feedback & 1.5s Progress Ring */}
+                      <div className="flex-1 w-full space-y-2 text-left">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                            실시간 제스처 상태
+                          </span>
+                          <span className="text-xs text-slate-500">1.5초 유지 시 자동 확정</span>
+                        </div>
+
+                        {/* Holding Progress Bar */}
+                        <div className="bg-slate-950/80 rounded-xl p-3 border border-slate-800/80">
+                          {holdingFinger ? (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between text-xs font-bold text-sky-400">
+                                <span>선택 번호: {holdingFinger}번 보기 유지 중!</span>
+                                <span>{(1.5 * (1 - holdProgress / 100)).toFixed(1)}초 남음</span>
+                              </div>
+                              <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all duration-75 rounded-full"
+                                  style={{ width: `${holdProgress}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 py-1">
+                              카메라에 <strong>손가락 1~4개</strong>를 펼치면 해당 보기가 선택됩니다.
+                              <br className="hidden sm:inline" /> 또는 하단의 보기를 마우스/터치로 직접 클릭하세요!
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Question Text Box */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl">
+                  <div className="text-xs font-bold uppercase tracking-wider text-sky-400 mb-1">
+                    QUESTION {currentQIndex + 1}
+                  </div>
+                  <h2 className="text-lg sm:text-xl font-bold text-white leading-relaxed">
+                    {currentQuestion.question}
+                  </h2>
+                </div>
+
+                {/* 4 Choices Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {currentQuestion.options.map((optionText, idx) => {
+                    const optionNumber = idx + 1;
+                    const isSelected = selectedOption === optionNumber;
+                    const isCorrectAnswer = optionNumber === currentQuestion.answer;
+                    const isHoldingThis = holdingFinger === optionNumber && !isAnswered;
+
+                    let cardStyle = "bg-slate-900/90 border-slate-800 hover:border-slate-700 hover:bg-slate-850 text-slate-200";
+
+                    if (isHoldingThis) {
+                      cardStyle = "bg-sky-950/60 border-sky-500 shadow-lg shadow-sky-500/20 text-sky-200 ring-2 ring-sky-500/50";
+                    }
+
+                    if (isAnswered) {
+                      if (isCorrectAnswer) {
+                        cardStyle = "bg-emerald-950/70 border-emerald-500 text-emerald-200 ring-2 ring-emerald-500/60 shadow-lg shadow-emerald-500/20";
+                      } else if (isSelected) {
+                        cardStyle = "bg-rose-950/70 border-rose-500 text-rose-200 ring-2 ring-rose-500/60";
+                      } else {
+                        cardStyle = "bg-slate-900/50 border-slate-800/60 opacity-60 text-slate-400";
+                      }
+                    }
+
+                    return (
+                      <button
+                        key={optionNumber}
+                        disabled={isAnswered}
+                        onClick={() => handleSelectOption(optionNumber)}
+                        className={`relative text-left p-4 rounded-xl border transition-all duration-150 flex items-start gap-3.5 group cursor-pointer ${cardStyle}`}
+                      >
+                        {/* Number Badge with Gesture Icon */}
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 border transition ${
+                          isHoldingThis 
+                            ? "bg-sky-500 text-white border-sky-400" 
+                            : isAnswered && isCorrectAnswer
+                            ? "bg-emerald-500 text-white border-emerald-400"
+                            : isAnswered && isSelected
+                            ? "bg-rose-500 text-white border-rose-400"
+                            : "bg-slate-800 text-slate-300 border-slate-700 group-hover:border-slate-600"
+                        }`}>
+                          {optionNumber}
+                        </div>
+
+                        {/* Option Text */}
+                        <div className="flex-1 pr-6">
+                          <p className="text-sm font-medium leading-snug">
+                            {optionText}
+                          </p>
+                          <span className="text-[11px] text-slate-400 mt-1 block">
+                            손가락 {optionNumber}개 제스처
+                          </span>
+                        </div>
+
+                        {/* Visual Circular Hold Progress when holding */}
+                        {isHoldingThis && (
+                          <div className="absolute top-3 right-3 w-7 h-7">
+                            <svg className="w-full h-full" viewBox="0 0 36 36">
+                              <path
+                                className="text-slate-800"
+                                strokeWidth="4"
+                                stroke="currentColor"
+                                fill="none"
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              />
+                              <path
+                                className="text-sky-400 hold-ring-circle"
+                                strokeDasharray="100, 100"
+                                strokeDashoffset={100 - holdProgress}
+                                strokeWidth="4"
+                                strokeLinecap="round"
+                                stroke="currentColor"
+                                fill="none"
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              />
+                            </svg>
+                          </div>
+                        )}
+
+                        {/* Result Icon Badge */}
+                        {isAnswered && (
+                          <div className="absolute top-3 right-3 text-lg font-bold">
+                            {isCorrectAnswer ? "✓" : isSelected ? "✗" : ""}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Explanation & Next Button Card (Shown after selection) */}
+                {isAnswered && (
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl space-y-4 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        {selectedOption === currentQuestion.answer ? (
+                          <span className="px-3 py-1 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold text-xs flex items-center gap-1">
+                            <span>🎉</span> 정답입니다! (+10점)
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 rounded-full bg-rose-950 text-rose-400 border border-rose-800 font-bold text-xs flex items-center gap-1">
+                            <span>💡</span> 아쉬워요! 정답은 {currentQuestion.answer}번입니다.
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-slate-400 font-mono">
+                        현재 점수: {score}점
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-950/70 p-4 rounded-xl border border-slate-800">
+                      <h4 className="text-xs font-bold text-sky-400 uppercase mb-1">핵심 과학 해설</h4>
+                      <p className="text-sm text-slate-300 leading-relaxed">
+                        {currentQuestion.explanation}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleNextQuestion}
+                      className="w-full py-3.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-sky-500/25 transition transform active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <span>{currentQIndex < SCIENCE_QUESTIONS.length - 1 ? "다음 문제로 이동 ➔" : "최종 결과 확인하기 🏆"}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Final Results Screen */
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center space-y-6 shadow-2xl max-w-2xl mx-auto my-auto">
+                <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-tr from-amber-400 to-yellow-500 flex items-center justify-center text-4xl shadow-lg shadow-amber-500/30">
+                  🏆
+                </div>
+
+                <div className="space-y-2">
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
+                    과학 퀴즈 완료!
+                  </h2>
+                  <p className="text-slate-400 text-sm">
+                    {score >= 90 
+                      ? "대단합니다! 중학교 과학 핵심 개념을 완벽하게 마스터하셨습니다!" 
+                      : score >= 70 
+                      ? "훌륭해요! 조금만 더 다듬으면 만점도 가능합니다!" 
+                      : "수고하셨습니다! 틀린 문제의 해설을 다시 복습해 보세요."}
+                  </p>
+                </div>
+
+                {/* Score Summary Box */}
+                <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 max-w-sm mx-auto space-y-2">
+                  <span className="text-xs text-slate-400 uppercase font-semibold">최종 획득 점수</span>
+                  <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-amber-300">
+                    {score} <span className="text-2xl font-bold text-slate-400">/ 100</span>
+                  </div>
+                  <div className="text-xs text-sky-400 font-medium">
+                    정답 {score / 10}문제 / 오답 {10 - (score / 10)}문제
+                  </div>
+                </div>
+
+                {/* Questions Review Accordion */}
+                <div className="text-left space-y-2 max-h-60 overflow-y-auto pr-1">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase">문제별 정답 및 해설 다시보기</h3>
+                  {SCIENCE_QUESTIONS.map((q, idx) => {
+                    const ansInfo = userAnswers[idx];
+                    const isRight = ansInfo && ansInfo.isCorrect;
+                    return (
+                      <details key={q.id} className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-xs text-slate-300">
+                        <summary className="font-semibold cursor-pointer flex items-center justify-between">
+                          <span>
+                            {isRight ? "🟢" : "🔴"} {idx + 1}. {q.title}
+                          </span>
+                          <span className={isRight ? "text-emerald-400" : "text-rose-400"}>
+                            {isRight ? "정답" : `오답 (정답: ${q.answer}번)`}
+                          </span>
+                        </summary>
+                        <div className="mt-2.5 pt-2 border-t border-slate-800 text-slate-400 space-y-1">
+                          <p><strong className="text-slate-300">질문:</strong> {q.question}</p>
+                          <p><strong className="text-emerald-400">정답 보기:</strong> {q.options[q.answer - 1]}</p>
+                          <p><strong className="text-sky-400">해설:</strong> {q.explanation}</p>
+                        </div>
+                      </details>
+                    );
+                  })}
+                </div>
+
+                {/* Retry Button */}
+                <button
+                  onClick={handleRestartQuiz}
+                  className="w-full py-3.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-sky-500/25 transition transform active:scale-98 cursor-pointer"
+                >
+                  🔄 다시 도전하기
+                </button>
+              </div>
+            )}
+          </main>
+
+          {/* Footer Guide */}
+          <footer className="bg-slate-900 border-t border-slate-800 px-4 py-3 text-center text-xs text-slate-500">
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+              <span>☝️ 검지 1개 = 1번</span>
+              <span>✌️ 검지+중지 2개 = 2번</span>
+              <span>🖐️ 손가락 3개 = 3번</span>
+              <span>🖖 손가락 4개 = 4번</span>
+              <span>🖱️ 클릭/터치 대체 가능</span>
+            </div>
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
